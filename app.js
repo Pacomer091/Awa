@@ -174,25 +174,38 @@ class AwaTracker {
   }
 
   getHydrationStateAt(timeMs) {
-    // Se considera "muy hidratado" si el usuario ha bebido al menos 350ml de agua estimada en las últimas 3 horas (180 mins)
     const threeHoursMs = 3 * 60 * 60 * 1000;
-    const windowStart = timeMs - threeHoursMs;
+    const sixHoursMs = 6 * 60 * 60 * 1000;
     
-    let recentWater = 0;
+    let water3h = 0;
+    let water6h = 0;
+    
     this.logs.forEach(log => {
       if (log.type === 'drink') {
         const logTime = new Date(log.timestamp).getTime();
-        if (logTime >= windowStart && logTime <= timeMs) {
-          recentWater += log.waterEstimate;
+        if (logTime <= timeMs) {
+          if (logTime >= timeMs - threeHoursMs) {
+            water3h += log.waterEstimate;
+          }
+          if (logTime >= timeMs - sixHoursMs) {
+            water6h += log.waterEstimate;
+          }
         }
       }
     });
     
-    return recentWater >= 350 ? 'high' : 'normal';
+    if (water6h === 0) {
+      return 'none'; // Sin ingestas en las últimas 6 horas -> producción basal detenida (0 ml/min)
+    } else if (water3h >= 350) {
+      return 'high'; // Muy hidratado -> diuresis activa (3.0 ml/min)
+    } else {
+      return 'normal'; // Hidratación normal -> producción basal estándar (1.2 ml/min)
+    }
   }
 
   getUrineProductionRateAt(timeMs) {
     const state = this.getHydrationStateAt(timeMs);
+    if (state === 'none') return 0.0;
     return state === 'high' ? 3.0 : 1.2;
   }
 
