@@ -173,40 +173,111 @@ class AwaTracker {
     return drink.waterEstimate * (1 - Math.exp(-elapsedMins / tau));
   }
 
+  getHydrationStateAt(timeMs) {
+    // Se considera "muy hidratado" si el usuario ha bebido al menos 350ml de agua estimada en las últimas 3 horas (180 mins)
+    const threeHoursMs = 3 * 60 * 60 * 1000;
+    const windowStart = timeMs - threeHoursMs;
+    
+    let recentWater = 0;
+    this.logs.forEach(log => {
+      if (log.type === 'drink') {
+        const logTime = new Date(log.timestamp).getTime();
+        if (logTime >= windowStart && logTime <= timeMs) {
+          recentWater += log.waterEstimate;
+        }
+      }
+    });
+    
+    return recentWater >= 350 ? 'high' : 'normal';
+  }
+
+  getUrineProductionRateAt(timeMs) {
+    const state = this.getHydrationStateAt(timeMs);
+    return state === 'high' ? 3.0 : 1.2;
+  }
+
+  computeBaselineUrineBetween(startTimeMs, endTimeMs) {
+    if (endTimeMs <= startTimeMs) return 0;
+    
+    let totalUrine = 0;
+    const stepMs = 5 * 60 * 1000; // Pasos de 5 minutos para velocidad y precisión
+    
+    for (let t = startTimeMs; t < endTimeMs; t += stepMs) {
+      const currentStepEnd = Math.min(endTimeMs, t + stepMs);
+      const durationMins = (currentStepEnd - t) / (60 * 1000);
+      const rate = this.getUrineProductionRateAt(t);
+      totalUrine += rate * durationMins;
+    }
+    
+    return totalUrine;
+  }
+
   computeBladderStateAt(targetTime) {
     const sortedLogs = [...this.logs]
       .filter(log => new Date(log.timestamp).getTime() <= targetTime)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      
-    let occurredDrinks = [];
-    let peeAdjustment = 0;
+
+    const startOfDay = new Date(this.currentDate);
+    startOfDay.setHours(7, 0, 0, 0); // Comenzar producción basal a las 7:00 AM (despertar)
+    let startMs = startOfDay.getTime();
     
-    sortedLogs.forEach(log => {
-      if (log.type === 'drink') {
-        occurredDrinks.push(log);
-      } else if (log.type === 'pee') {
-        const peeTime = new Date(log.timestamp).getTime();
-        let vBefore = 0;
-        occurredDrinks.forEach(d => {
-          vBefore += this.filteredAmount(d, peeTime);
-        });
-        vBefore -= peeAdjustment;
-        if (vBefore < 0) vBefore = 0;
-        
-        const vAfter = Math.max(0, vBefore - log.volume);
-        const delta = vBefore - vAfter;
-        peeAdjustment += delta;
+    if (sortedLogs.length > 0) {
+      const firstLogTime = new Date(sortedLogs[0].timestamp).getTime();
+      if (firstLogTime < startMs) {
+        startMs = firstLogTime;
       }
-    });
+    }
     
-    let finalVolume = 0;
-    occurredDrinks.forEach(d => {
-      finalVolume += this.filteredAmount(d, targetTime);
-    });
-    finalVolume -= peeAdjustment;
-    if (finalVolume < 0) finalVolume = 0;
+    if (targetTime < startMs) {
+      startMs = targetTime;
+    }
+      
+    let lastTime = startMs;
+    let bladderVolume = 0;
+    let activeDrinks = [];
     
-    return finalVolume;
+    // Recorremos los eventos cronológicamente
+    for (let i = 0; i < sortedLogs.length; i++) {
+      const log = sortedLogs[i];
+      const logTime = new Date(log.timestamp).getTime();
+      
+      if (logTime > lastTime) {
+        // A. Sumar producción basal continua
+        bladderVolume += this.computeBaselineUrineBetween(lastTime, logTime);
+        
+        // B. Sumar incremento de filtración gradual de bebidas activas
+        activeDrinks.forEach(d => {
+          const prevFiltered = this.filteredAmount(d, lastTime);
+          const nextFiltered = this.filteredAmount(d, logTime);
+          bladderVolume += (nextFiltered - prevFiltered);
+        });
+      }
+      
+      // Aplicar el evento
+      if (log.type === 'drink') {
+        activeDrinks.push(log);
+      } else if (log.type === 'pee') {
+        // La micción vacía la vejiga en base al volumen meado, limitado a >= 0
+        bladderVolume = Math.max(0, bladderVolume - log.volume);
+      }
+      
+      lastTime = Math.max(lastTime, logTime);
+    }
+    
+    // Sumar el remanente desde el último evento hasta el tiempo objetivo (targetTime)
+    if (targetTime > lastTime) {
+      // A. Producción basal
+      bladderVolume += this.computeBaselineUrineBetween(lastTime, targetTime);
+      
+      // B. Filtración de bebidas
+      activeDrinks.forEach(d => {
+        const prevFiltered = this.filteredAmount(d, lastTime);
+        const nextFiltered = this.filteredAmount(d, targetTime);
+        bladderVolume += (nextFiltered - prevFiltered);
+      });
+    }
+    
+    return Math.max(0, bladderVolume);
   }
 
   tick() {
@@ -318,6 +389,9 @@ class AwaTracker {
     const badge = this.filtrationStatusBadge;
     const spinner = document.querySelector('.filtration-spinner');
 
+    const baselineRate = this.getUrineProductionRateAt(nowSim);
+    const totalRate = rate + baselineRate;
+
     if (remainingToFilter > 0.1 && rate > 0.01) {
       if (badge) {
         badge.textContent = "Filtrando";
@@ -330,7 +404,7 @@ class AwaTracker {
         this.filtrationProgressText.textContent = `Procesando: ${totalFilteredVolume.toFixed(0)} / ${totalWaterIntake.toFixed(0)} ml`;
       }
       if (this.filtrationRateText) {
-        this.filtrationRateText.textContent = `Filtrando a +${rate.toFixed(1)} ml/min`;
+        this.filtrationRateText.textContent = `Filtrando a +${totalRate.toFixed(1)} ml/min (Basal: +${baselineRate.toFixed(1)})`;
       }
       if (this.absorptionEtaText) {
         this.absorptionEtaText.textContent = `ETA: ${maxEtaMins} min`;
@@ -347,7 +421,7 @@ class AwaTracker {
         this.filtrationProgressText.textContent = "Todo procesado";
       }
       if (this.filtrationRateText) {
-        this.filtrationRateText.textContent = "Riñones en reposo";
+        this.filtrationRateText.textContent = `Producción basal: +${baselineRate.toFixed(1)} ml/min`;
       }
       if (this.absorptionEtaText) {
         this.absorptionEtaText.textContent = "--";
