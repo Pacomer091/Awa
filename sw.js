@@ -1,4 +1,4 @@
-const CACHE_NAME = 'awa-cache-v1';
+const CACHE_NAME = 'awa-cache-v2';
 const ASSETS = [
   './',
   './index.html',

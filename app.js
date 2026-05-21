@@ -38,8 +38,8 @@ class AwaTracker {
       te: { name: 'Té', ratio: 0.85, icon: 'fa-leaf', color: '#556b2f', tau: 25 },
       refresco: { name: 'Refresco', ratio: 0.65, icon: 'fa-bottle-water', color: '#e63946', tau: 50 },
       cerveza: { name: 'Cerveza', ratio: 0.95, icon: 'fa-beer-mug-empty', color: '#ffb703', tau: 20 },
-      vino: { name: 'Vino', ratio: 1.00, icon: 'fa-wine-glass', color: '#581845', tau: 20 },
-      cubata: { name: 'Cubata', ratio: 1.05, icon: 'fa-martini-glass-citrus', color: '#7209b7', tau: 15 }
+      vino: { name: 'Vino', ratio: 1.30, icon: 'fa-wine-glass', color: '#581845', tau: 20 },
+      cubata: { name: 'Cubata', ratio: 1.80, icon: 'fa-martini-glass-citrus', color: '#7209b7', tau: 15 }
     };
 
     // Predefined Urine color levels (Clinical Hydration Indicators)
