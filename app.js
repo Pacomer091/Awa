@@ -209,16 +209,53 @@ class AwaTracker {
     return state === 'high' ? 3.0 : 1.2;
   }
 
-  computeBaselineUrineBetween(startTimeMs, endTimeMs) {
+  getUrineRateAt(timeMs) {
+    const hydrationState = this.getHydrationStateAt(timeMs);
+    if (hydrationState === 'none') {
+      return 0.0;
+    }
+    
+    // Tasa basal (1.2 o 3.0 ml/min)
+    const baselineRate = hydrationState === 'high' ? 3.0 : 1.2;
+    
+    // Sumar tasa de filtración de bebidas activas en este milisegundo
+    let drinkRate = 0;
+    this.logs.forEach(log => {
+      if (log.type === 'drink') {
+        const logTime = new Date(log.timestamp).getTime();
+        const elapsedMs = timeMs - logTime;
+        if (elapsedMs >= 0) {
+          const dbDrink = this.drinkDatabase[log.name.toLowerCase()] || { tau: 40 };
+          const tau = dbDrink.tau;
+          const durationMs = tau * 4.6 * 60 * 1000;
+          if (elapsedMs < durationMs) {
+            const elapsedMins = elapsedMs / (1000 * 60);
+            drinkRate += (log.waterEstimate / tau) * Math.exp(-elapsedMins / tau);
+          }
+        }
+      }
+    });
+    
+    const totalRate = baselineRate + drinkRate;
+    
+    // CAPAR la tasa total de entrada a la vejiga:
+    // Máximo 3.0 ml/min si está muy hidratado o hay bebidas filtrándose.
+    // Máximo 1.2 ml/min en hidratación normal.
+    const maxAllowedRate = (hydrationState === 'high' || drinkRate > 0.01) ? 3.0 : 1.2;
+    
+    return Math.min(maxAllowedRate, totalRate);
+  }
+
+  computeUrineAccumulationBetween(startTimeMs, endTimeMs) {
     if (endTimeMs <= startTimeMs) return 0;
     
     let totalUrine = 0;
-    const stepMs = 5 * 60 * 1000; // Pasos de 5 minutos para velocidad y precisión
+    const stepMs = 5 * 60 * 1000; // Pasos de 5 minutos
     
     for (let t = startTimeMs; t < endTimeMs; t += stepMs) {
       const currentStepEnd = Math.min(endTimeMs, t + stepMs);
       const durationMins = (currentStepEnd - t) / (60 * 1000);
-      const rate = this.getUrineProductionRateAt(t);
+      const rate = this.getUrineRateAt(t);
       totalUrine += rate * durationMins;
     }
     
@@ -244,7 +281,6 @@ class AwaTracker {
       
     let lastTime = startMs;
     let bladderVolume = 0;
-    let activeDrinks = [];
     
     // Recorremos los eventos cronológicamente
     for (let i = 0; i < sortedLogs.length; i++) {
@@ -252,39 +288,21 @@ class AwaTracker {
       const logTime = new Date(log.timestamp).getTime();
       
       if (logTime > lastTime) {
-        // A. Sumar producción basal continua
-        bladderVolume += this.computeBaselineUrineBetween(lastTime, logTime);
-        
-        // B. Sumar incremento de filtración gradual de bebidas activas
-        activeDrinks.forEach(d => {
-          const prevFiltered = this.filteredAmount(d, lastTime);
-          const nextFiltered = this.filteredAmount(d, logTime);
-          bladderVolume += (nextFiltered - prevFiltered);
-        });
+        // Sumar producción basal y filtración acumulada con el límite (cap) aplicado
+        bladderVolume += this.computeUrineAccumulationBetween(lastTime, logTime);
       }
       
-      // Aplicar el evento
-      if (log.type === 'drink') {
-        activeDrinks.push(log);
-      } else if (log.type === 'pee') {
-        // La micción vacía la vejiga en base al volumen meado, limitado a >= 0
+      // Aplicar el evento de meada (pee)
+      if (log.type === 'pee') {
         bladderVolume = Math.max(0, bladderVolume - log.volume);
       }
       
       lastTime = Math.max(lastTime, logTime);
     }
     
-    // Sumar el remanente desde el último evento hasta el tiempo objetivo (targetTime)
+    // Sumar el remanente hasta el tiempo objetivo (targetTime)
     if (targetTime > lastTime) {
-      // A. Producción basal
-      bladderVolume += this.computeBaselineUrineBetween(lastTime, targetTime);
-      
-      // B. Filtración de bebidas
-      activeDrinks.forEach(d => {
-        const prevFiltered = this.filteredAmount(d, lastTime);
-        const nextFiltered = this.filteredAmount(d, targetTime);
-        bladderVolume += (nextFiltered - prevFiltered);
-      });
+      bladderVolume += this.computeUrineAccumulationBetween(lastTime, targetTime);
     }
     
     return Math.max(0, bladderVolume);
@@ -400,7 +418,7 @@ class AwaTracker {
     const spinner = document.querySelector('.filtration-spinner');
 
     const baselineRate = this.getUrineProductionRateAt(nowSim);
-    const totalRate = rate + baselineRate;
+    const totalRate = this.getUrineRateAt(nowSim);
 
     if (remainingToFilter > 0.1 && rate > 0.01) {
       if (badge) {
