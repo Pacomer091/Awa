@@ -217,16 +217,13 @@ class AwaTracker {
       .filter(log => new Date(log.timestamp).getTime() <= targetTime)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    const startOfDay = new Date(this.currentDate);
-    startOfDay.setHours(7, 0, 0, 0); // Comenzar producción basal a las 7:00 AM (despertar)
-    let startMs = startOfDay.getTime();
-    
-    if (sortedLogs.length > 0) {
-      const firstLogTime = new Date(sortedLogs[0].timestamp).getTime();
-      if (firstLogTime < startMs) {
-        startMs = firstLogTime;
-      }
+    // Si no hay registros aún hoy, la vejiga inicia completamente vacía (0 ml)
+    if (sortedLogs.length === 0) {
+      return 0;
     }
+
+    // Comenzar producción basal a partir del primer registro del día
+    let startMs = new Date(sortedLogs[0].timestamp).getTime();
     
     if (targetTime < startMs) {
       startMs = targetTime;
