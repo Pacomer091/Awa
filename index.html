@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Awa - Vejiga & Hidratación Tracker</title>
+  
+  <!-- SEO & PWA Meta Tags -->
+  <meta name="description" content="Controla de forma interactiva y científica el volumen acumulado en tu vejiga por orinar en formato ultra-alto 9:20.">
+  <meta name="theme-color" content="#0b132b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <!-- App Container (Locked to tall 9:20 mobile viewport ratio on desktop, fluid on mobile) -->
+  <div class="app-container" id="app">
+    
+    <!-- Virtual Phone Bezel elements (Visible on desktop mockup, auto-adaptive) -->
+    <div class="phone-camera-punch"></div>
+    <div class="phone-status-bar">
+      <span class="status-time" id="status-bar-time">12:00</span>
+      <div class="status-icons">
+        <i class="fa-solid fa-signal"></i>
+        <i class="fa-solid fa-wifi"></i>
+        <i class="fa-solid fa-battery-three-quarters"></i>
+      </div>
+    </div>
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <div class="logo-icon">
+          <i class="fa-solid fa-droplet pulse-animation"></i>
+        </div>
+        <h1>Awa</h1>
+      </div>
+      
+      <!-- Quick Date Selector -->
+      <div class="date-selector">
+        <button id="prev-day-btn" class="icon-btn" title="Día Anterior"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="current-date-display" class="date-text">Hoy</span>
+        <button id="next-day-btn" class="icon-btn" title="Día Siguiente" disabled><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      
+      <!-- Settings / Config trigger -->
+      <button id="settings-btn" class="icon-btn-large" title="Ajustes"><i class="fa-solid fa-gear"></i></button>
+    </header>
+
+    <!-- Main Content Area (Scrollable & Flex-spaced) -->
+    <main class="app-content">
+      
+      <!-- Hero Bladder Dashboard Card (Volume accumulated in body) -->
+      <section class="dashboard-balance-card glass-panel">
+        <div class="balance-main">
+          <span class="balance-label">Líquido por Miccionar</span>
+          <h2 id="bladder-volume-val" class="balance-value">0.0 <span class="unit">ml</span></h2>
+          <span id="bladder-status-bubble" class="balance-subtext">Vejiga vacía y cómoda</span>
+        </div>
+        
+        <div class="balance-details">
+          <div class="detail-item intake">
+            <div class="detail-icon"><i class="fa-solid fa-glass-water"></i></div>
+            <div class="detail-text">
+              <span class="detail-label">Ingerido total</span>
+              <span id="total-intake-val" class="detail-val">0 ml</span>
+            </div>
+          </div>
+          
+          <div class="detail-divider"></div>
+          
+          <div class="detail-item output">
+            <div class="detail-icon"><i class="fa-solid fa-toilet"></i></div>
+            <div class="detail-text">
+              <span class="detail-label">Orinado total</span>
+              <span id="total-output-val" class="detail-val">0 ml</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Kidney Filtration Active Panel -->
+      <section class="kidney-filtration-section">
+        <div class="filtration-card glass-panel" id="kidney-filtration-panel">
+          <div class="filtration-header">
+            <div class="filtration-title">
+              <i class="fa-solid fa-arrows-spin filtration-spinner"></i>
+              <span>Procesamiento Renal</span>
+            </div>
+            <span class="filtration-status" id="filtration-status-badge">Estable</span>
+          </div>
+          <div class="filtration-progress-container">
+            <div class="filtration-progress-bar">
+              <div class="filtration-progress-fill" id="filtration-progress-fill" style="width: 0%;"></div>
+            </div>
+            <span class="filtration-progress-text" id="filtration-progress-text">Todo filtrado</span>
+          </div>
+          <div class="filtration-meta">
+            <span id="filtration-rate-text">Riñones en reposo</span>
+            <span id="absorption-eta-text">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Wave Bladder Tank Container (Visualizing urine accumulation) -->
+      <section class="liquid-tank-section">
+        <div class="tank-card glass-panel">
+          
+          <!-- Animated Liquid Sphere -->
+          <div class="liquid-sphere-container">
+            <div class="liquid-sphere">
+              <!-- Animated SVG wave overlay -->
+              <svg class="water-wave-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <!-- First wave (background) -->
+                <path id="wave-back" class="wave-path back-wave" d="M 0 50 Q 25 40 50 50 T 100 50 L 100 100 L 0 100 Z"></path>
+                <!-- Second wave (foreground) -->
+                <path id="wave-front" class="wave-path front-wave" d="M 0 50 Q 25 60 50 50 T 100 50 L 100 100 L 0 100 Z"></path>
+              </svg>
+              
+              <!-- Core Display Inside Sphere -->
+              <div class="sphere-info">
+                <span class="sphere-label">Nivel Vejiga</span>
+                <span id="bladder-pct" class="sphere-percent">0%</span>
+                <span id="bladder-progress-text" class="sphere-subtext">0 / 500 ml</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Hydration Health Status -->
+          <div class="hydration-status-indicator">
+            <span class="status-dot green" id="status-dot"></span>
+            <span id="hydration-health-desc" class="status-desc">Cargando estado...</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- History & Stats section -->
+      <section class="stats-section">
+        
+        <!-- Toggle Tabs: Historial vs Gráfica -->
+        <div class="tabs-header">
+          <button id="tab-timeline-btn" class="tab-btn active"><i class="fa-solid fa-list-ul"></i> Historial</button>
+          <button id="tab-chart-btn" class="tab-btn"><i class="fa-solid fa-chart-line"></i> Curva</button>
+        </div>
+        
+        <div class="tab-contents">
+          <!-- Timeline History View -->
+          <div id="tab-timeline-content" class="tab-content-panel active">
+            <div id="timeline-list" class="timeline-container">
+              <!-- Dynamic Timeline items appear here -->
+              <div class="empty-timeline-state">
+                <i class="fa-solid fa-circle-info"></i>
+                <p>No hay registros el día de hoy.<br>¡Comienza añadiendo agua o pipí!</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Chart.js Graphical View -->
+          <div id="tab-chart-content" class="tab-content-panel">
+            <div class="chart-wrapper glass-panel">
+              <canvas id="hydration-chart"></canvas>
+            </div>
+            <div class="chart-stats-summary">
+              <div class="summary-box">
+                <span class="box-label">Retención Media</span>
+                <span id="avg-efficiency-val" class="box-value">-- %</span>
+              </div>
+              <div class="summary-box">
+                <span class="box-label">Estado Pipí</span>
+                <span id="avg-urine-color-val" class="box-value">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Sticky Navigation / Action Panel -->
+    <footer class="app-navigation">
+      <div class="nav-actions">
+        <!-- Beber Trigger Button -->
+        <button id="trigger-drink-sheet" class="nav-btn drink-btn">
+          <div class="btn-ripple"></div>
+          <i class="fa-solid fa-plus-circle"></i>
+          <span>➕ Beber</span>
+        </button>
+        
+        <!-- Mear Trigger Button -->
+        <button id="trigger-pee-sheet" class="nav-btn pee-btn">
+          <div class="btn-ripple"></div>
+          <i class="fa-solid fa-toilet-paper"></i>
+          <span>🚽 Mear</span>
+        </button>
+      </div>
+    </footer>
+
+    <!-- BOTTOM SHEET: BEBER (Drink Modal Drawer) -->
+    <div id="drink-bottom-sheet" class="bottom-sheet-overlay">
+      <div class="bottom-sheet-backdrop" id="drink-sheet-backdrop"></div>
+      <div class="bottom-sheet-content">
+        <!-- Slider handle for dragging visual -->
+        <div class="sheet-handle"></div>
+        
+        <div class="sheet-header">
+          <h3>¿Qué has bebido?</h3>
+          <button class="close-sheet-btn" id="close-drink-sheet"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="sheet-body">
+          <!-- Drinks Grid -->
+          <div class="drinks-grid">
+            <button class="drink-item-card active" data-drink="agua" data-ratio="0.70">
+              <span class="drink-badge">70%</span>
+              <div class="drink-icon" style="--card-color: #00b4d8"><i class="fa-solid fa-glass-water"></i></div>
+              <span class="drink-name">Agua</span>
+            </button>
+            <button class="drink-item-card" data-drink="leche" data-ratio="0.50">
+              <span class="drink-badge">50%</span>
+              <div class="drink-icon" style="--card-color: #f5ebe0"><i class="fa-solid fa-cow"></i></div>
+              <span class="drink-name">Leche</span>
+            </button>
+            <button class="drink-item-card" data-drink="cafe" data-ratio="0.90">
+              <span class="drink-badge">90%</span>
+              <div class="drink-icon" style="--card-color: #6f4e37"><i class="fa-solid fa-mug-hot"></i></div>
+              <span class="drink-name">Café</span>
+            </button>
+            <button class="drink-item-card" data-drink="te" data-ratio="0.85">
+              <span class="drink-badge">85%</span>
+              <div class="drink-icon" style="--card-color: #556b2f"><i class="fa-solid fa-leaf"></i></div>
+              <span class="drink-name">Té</span>
+            </button>
+            <button class="drink-item-card" data-drink="refresco" data-ratio="0.65">
+              <span class="drink-badge">65%</span>
+              <div class="drink-icon" style="--card-color: #e63946"><i class="fa-solid fa-bottle-water"></i></div>
+              <span class="drink-name">Refresco</span>
+            </button>
+            <button class="drink-item-card" data-drink="cerveza" data-ratio="0.95">
+              <span class="drink-badge">95%</span>
+              <div class="drink-icon" style="--card-color: #ffb703"><i class="fa-solid fa-beer-mug-empty"></i></div>
+              <span class="drink-name">Cerveza</span>
+            </button>
+            <button class="drink-item-card" data-drink="vino" data-ratio="1.00">
+              <span class="drink-badge">100%</span>
+              <div class="drink-icon" style="--card-color: #581845"><i class="fa-solid fa-wine-glass"></i></div>
+              <span class="drink-name">Vino</span>
+            </button>
+            <button class="drink-item-card" data-drink="cubata" data-ratio="1.05">
+              <span class="drink-badge">105%</span>
+              <div class="drink-icon" style="--card-color: #7209b7"><i class="fa-solid fa-martini-glass-citrus"></i></div>
+              <span class="drink-name">Cubata</span>
+            </button>
+          </div>
+
+          <!-- Volume selector control -->
+          <div class="volume-selector-container">
+            <label class="section-label">Volumen consumido</label>
+            
+            <div class="preset-volumes">
+              <button class="preset-vol-btn" data-vol="150">150 ml <span class="preset-sub">Vaso</span></button>
+              <button class="preset-vol-btn active" data-vol="250">250 ml <span class="preset-sub">Taza</span></button>
+              <button class="preset-vol-btn" data-vol="330">330 ml <span class="preset-sub">Lata</span></button>
+              <button class="preset-vol-btn" data-vol="500">500 ml <span class="preset-sub">Botella</span></button>
+            </div>
+            
+            <div class="custom-volume-slider-group">
+              <div class="slider-header">
+                <span>Personalizado</span>
+                <span id="custom-vol-display" class="slider-display">250 ml</span>
+              </div>
+              <input type="range" id="drink-vol-range" min="50" max="1500" step="10" value="250" class="app-range-slider">
+            </div>
+          </div>
+
+          <!-- Live dynamic calculation output -->
+          <div class="live-calculation-card blue-glow">
+            <div class="calc-icon"><i class="fa-solid fa-calculator"></i></div>
+            <div class="calc-text">
+              <span class="calc-title">Aporte Estimado a la Vejiga</span>
+              <p class="calc-result">Filtrará unos <strong id="drink-calc-water-val">175</strong> ml hacia tu vejiga.</p>
+            </div>
+          </div>
+
+          <!-- Action Button inside sheet -->
+          <button id="save-drink-btn" class="sheet-action-btn drink-action">
+            <i class="fa-solid fa-circle-check"></i> Registrar Ingesta
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM SHEET: MEAR (Pee Modal Drawer) -->
+    <div id="pee-bottom-sheet" class="bottom-sheet-overlay">
+      <div class="bottom-sheet-backdrop" id="pee-sheet-backdrop"></div>
+      <div class="bottom-sheet-content">
+        <div class="sheet-handle"></div>
+        
+        <div class="sheet-header">
+          <h3>¿Cómo ha sido la meada?</h3>
+          <button class="close-sheet-btn" id="close-pee-sheet"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="sheet-body">
+          
+          <!-- Urine Size Picker (User proposal: Diminuta, Pequeña, Mediana, Grande, Enorme) -->
+          <div class="urine-size-selector">
+            <label class="section-label">Tamaño / Volumen Expulsado</label>
+            <div class="size-cards-grid">
+              
+              <button class="size-card" data-size="diminuta" data-vol="50">
+                <div class="droplets-icons"><i class="fa-solid fa-droplet size-xs"></i></div>
+                <span class="size-name">Diminuta</span>
+                <span class="size-vol">~50 ml</span>
+              </button>
+              
+              <button class="size-card" data-size="pequeña" data-vol="150">
+                <div class="droplets-icons"><i class="fa-solid fa-droplet size-s"></i></div>
+                <span class="size-name">Pequeña</span>
+                <span class="size-vol">~150 ml</span>
+              </button>
+              
+              <button class="size-card active" data-size="mediana" data-vol="300">
+                <div class="droplets-icons">
+                  <i class="fa-solid fa-droplet size-m"></i>
+                  <i class="fa-solid fa-droplet size-m"></i>
+                </div>
+                <span class="size-name">Mediana</span>
+                <span class="size-vol">~300 ml</span>
+              </button>
+              
+              <button class="size-card" data-size="grande" data-vol="500">
+                <div class="droplets-icons">
+                  <i class="fa-solid fa-droplet size-l"></i>
+                  <i class="fa-solid fa-droplet size-l"></i>
+                  <i class="fa-solid fa-droplet size-l"></i>
+                </div>
+                <span class="size-name">Grande</span>
+                <span class="size-vol">~500 ml</span>
+              </button>
+              
+              <button class="size-card" data-size="enorme" data-vol="800">
+                <div class="droplets-icons">
+                  <i class="fa-solid fa-droplet size-xl"></i>
+                  <i class="fa-solid fa-droplet size-xl animate-bounce"></i>
+                </div>
+                <span class="size-name">Enorme</span>
+                <span class="size-vol">~800 ml</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Urine Color Picker (Standard Clinical Hydration Indicator) -->
+          <div class="urine-color-selector">
+            <label class="section-label">Color de la Orina (Nivel de Hidratación)</label>
+            <div class="color-options-row">
+              
+              <button class="color-btn active" data-color-idx="1" style="--urine-color: #f7fafc; --urine-border: #cbd5e0;" title="Excelente (Hidratación Óptima)">
+                <div class="color-indicator"></div>
+                <span class="color-lbl">Óptima</span>
+              </button>
+              
+              <button class="color-btn" data-color-idx="2" style="--urine-color: #ffea70; --urine-border: #f6e05e;" title="Buena (Cuerpo Hidratado)">
+                <div class="color-indicator"></div>
+                <span class="color-lbl">Buena</span>
+              </button>
+              
+              <button class="color-btn" data-color-idx="3" style="--urine-color: #f6ad55; --urine-border: #ed8936;" title="Alerta (Bebe agua pronto)">
+                <div class="color-indicator"></div>
+                <span class="color-lbl">Alerta</span>
+              </button>
+              
+              <button class="color-btn" data-color-idx="4" style="--urine-color: #dd6b20; --urine-border: #c05621;" title="Severa (Deshidratación)">
+                <div class="color-indicator"></div>
+                <span class="color-lbl">Severa</span>
+              </button>
+              
+              <button class="color-btn" data-color-idx="5" style="--urine-color: #8b0000; --urine-border: #630000;" title="Alerta Crítica (Otras razones/Médico)">
+                <div class="color-indicator"></div>
+                <span class="color-lbl">Crítica</span>
+              </button>
+            </div>
+            <p id="urine-color-feedback" class="color-feedback-text text-green">Orina transparente: Hidratación excelente.</p>
+          </div>
+
+          <!-- Live dynamic calculation output for pee -->
+          <div class="live-calculation-card amber-glow">
+            <div class="calc-icon"><i class="fa-solid fa-toilet"></i></div>
+            <div class="calc-text">
+              <span class="calc-title">Vaciamiento de Vejiga</span>
+              <p class="calc-result">Liberarás <strong id="pee-calc-water-val">300</strong> ml de orina acumulada.</p>
+            </div>
+          </div>
+
+          <!-- Action Button inside sheet -->
+          <button id="save-pee-btn" class="sheet-action-btn pee-action">
+            <i class="fa-solid fa-circle-check"></i> Registrar Micción
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS / CONFIG OVERLAY PANEL -->
+    <div id="settings-overlay" class="settings-overlay-panel">
+      <div class="settings-content glass-panel">
+        <div class="settings-header">
+          <h3>Ajustes de Awa</h3>
+          <button id="close-settings-btn" class="icon-btn-large"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="settings-body">
+          
+          <!-- Edit Bladder Capacity -->
+          <div class="settings-section">
+            <label class="settings-label" for="daily-goal-input">Capacidad Máxima de Vejiga (ml)</label>
+            <div class="settings-input-group">
+              <input type="number" id="daily-goal-input" value="500" min="200" max="1000" step="50" class="settings-input">
+              <span class="settings-input-suffix">ml</span>
+            </div>
+            <p class="settings-sub">El nivel visual se calcula en base a la orina estimada acumulada en el cuerpo frente a esta capacidad (típicamente 500 ml).</p>
+          </div>
+
+          <!-- Web Audio API toggle (Sound settings) -->
+          <div class="settings-section row-layout">
+            <div class="label-group">
+              <label class="settings-label">Efectos de Sonido</label>
+              <p class="settings-sub">Sonidos sintetizados de fluidos al registrar.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="sound-effects-toggle" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <!-- Time Acceleration Setting -->
+          <div class="settings-section row-layout">
+            <div class="label-group">
+              <label class="settings-label">Velocidad del Tiempo</label>
+              <p class="settings-sub">Acelera el filtrado renal para pruebas.</p>
+            </div>
+            <div class="settings-select-group">
+              <select id="time-speed-select" class="settings-select">
+                <option value="1" selected>Tiempo Real (1x)</option>
+                <option value="60">Acelerado (60x)</option>
+                <option value="300">Rápido (300x)</option>
+                <option value="600">Ultra Rápido (600x)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dev simulation tools (Clear & Simulate previous days) -->
+          <div class="settings-section">
+            <label class="settings-label">Herramientas de Datos</label>
+            <div class="settings-btn-row">
+              <button id="simulate-data-btn" class="settings-action-btn secondary-action">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Simular Historial
+              </button>
+              <button id="clear-all-data-btn" class="settings-action-btn dangerous-action">
+                <i class="fa-solid fa-trash-can"></i> Borrar Todo
+              </button>
+            </div>
+            <p class="settings-sub warning-text"><i class="fa-solid fa-triangle-exclamation"></i> Borrar todo eliminará de forma permanente los registros guardados en tu LocalStorage.</p>
+          </div>
+          
+        </div>
+        
+        <div class="settings-footer">
+          <button id="save-settings-btn" class="settings-save-btn">Guardar Cambios</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Virtual Phone Home Indicator (Emulates gestures on desktop, hides on mobile) -->
+    <div class="phone-home-indicator"></div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
