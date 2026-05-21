@@ -1261,4 +1261,13 @@ class AwaTracker {
 
 document.addEventListener('DOMContentLoaded', () => {
   window.AwaApp = new AwaTracker();
+
+  // Registrar Service Worker para soporte PWA e instalabilidad
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('Awa Service Worker registrado con éxito:', reg.scope))
+        .catch(err => console.warn('Fallo al registrar el Service Worker:', err));
+    });
+  }
 });

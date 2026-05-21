@@ -1,0 +1,24 @@
+{
+  "name": "Awa - Tracker de Vejiga y Fisiología Renal",
+  "short_name": "Awa",
+  "description": "Controla de forma interactiva y científica el volumen acumulado en tu vejiga por orinar en formato ultra-alto 9:20.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b132b",
+  "theme_color": "#0b132b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
